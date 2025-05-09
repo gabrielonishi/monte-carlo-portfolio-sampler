@@ -18,12 +18,13 @@ dependencies = [
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
 
-[tool.ruff.lint]
-select = ["ALL"]
-
 [tool.ruff]
-select = ["E", "F", "I"]
-ignore = []
 line-length = 120
 
-extend-select = ["I"]
+[tool.ruff.lint]
+preview = true
+select = ['I', 'F', 'E', 'W', 'PL', 'PT']
+
+[tool.ruff.format]
+preview = true
+quote-style = 'single'
