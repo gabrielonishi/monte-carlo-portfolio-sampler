@@ -1,2 +1,3 @@
 docs/Aula17.pdf
 *.log
+*__pycache__
