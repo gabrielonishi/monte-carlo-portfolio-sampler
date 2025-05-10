@@ -2,13 +2,17 @@ import logging
 import pathlib
 import pickle
 import sys
+from multiprocessing import Pool
+from time import time
+from functools import lru_cache
 
 import pandas as pd
 
 import data_loader as dl
 
 PROD = False
-ASSETS_PER_PORTFOLIO = 20
+ASSETS_PER_PORTFOLIO = 25
+NUM_COMPANIES = 30
 
 script_dir = pathlib.Path(sys.argv[0]).parent.resolve()
 log_path = script_dir / 'app.log'
@@ -26,11 +30,14 @@ def fetch_data() -> dict[str : pd.DataFrame]:
     else:
         with open(file=dev_data_path, mode='rb') as f:
             companies_dfs = pickle.load(file=f)
+            companies = list(companies_dfs.keys())[:NUM_COMPANIES]
+            companies_dfs = {ticker: companies_dfs[ticker] for ticker in companies}
 
     return companies_dfs
 
 
-def generate_portfolio_combinations(companies: list[str], portfolio_len: int) -> list[list[str]]:
+@lru_cache
+def generate_portfolio_combinations(companies: tuple[str, ...], portfolio_len: int) -> list[list[str]]:
     if portfolio_len == 0:
         return [[]]
 
@@ -48,9 +55,11 @@ def generate_portfolio_combinations(companies: list[str], portfolio_len: int) ->
 
 def main():
     companies_dfs = fetch_data()
-    companies = list(companies_dfs.keys())
+    companies = tuple(companies_dfs.keys())
+    start = time()
     portfolios = generate_portfolio_combinations(companies, ASSETS_PER_PORTFOLIO)
     print(portfolios)
+    print(time() - start)
 
 if __name__ == '__main__':
     main()
