@@ -1,8 +1,12 @@
 """Fetches data from Yahoo Finance."""
 
 import logging
+import pickle
+import sys
 from datetime import date
 
+
+import pathlib
 import pandas as pd
 import requests
 import yfinance as yf
@@ -37,7 +41,7 @@ def get_djia_tickers() -> list[str]:
 
 def load_data_from_yf(tickers: list[str], simulation_start: date, simulation_end: date) -> dict[str, pd.DataFrame]:
     """Get data from YahooFinance using tickers and simulation period."""
-    dfs = {}
+    price_history_by_ticker = {}
 
     start = simulation_start.isoformat()
     end = simulation_end.isoformat()
@@ -52,10 +56,40 @@ def load_data_from_yf(tickers: list[str], simulation_start: date, simulation_end
             logger.exception(
                 "Couldn't fetch data from Yahoo Finance", extra={'error': e})
 
-        if df_ticker is None:
+        if df_ticker is None or 'Close' not in df_ticker.columns:
             logger.exception("Couldn't fetch data from Yahoo Finance", extra={
                              'company': ticker})
         else:
-            dfs[ticker] = df_ticker
+            price_history_by_ticker[ticker] = df_ticker['Close']
 
-    return dfs
+    return price_history_by_ticker
+
+def calculate_daily_returns(price_history_by_ticker: dict[str, pd.DataFrame]) -> dict:
+    daily_returns_by_ticker = {}
+    for ticker in price_history_by_ticker:
+        daily_returns_by_ticker[ticker] = price_history_by_ticker[ticker] / price_history_by_ticker[ticker].shift(1) - 1
+
+    return daily_returns_by_ticker
+
+def run(simulation_start: date, simulation_end: date, stage: str='PROD'):
+    if stage=='PROD':
+        tickers = get_djia_tickers()
+        price_history_by_ticker = load_data_from_yf(
+        tickers, simulation_start, simulation_end)
+    elif stage=='DEV':
+        NUM_COMPANIES = 30
+
+        script_dir = pathlib.Path(sys.argv[0]).parent.resolve()
+        dev_data_path = script_dir / 'financial_history_data_dev.pkl'
+
+        with open(file=dev_data_path, mode='rb') as f:
+            price_history_by_ticker = pickle.load(file=f)
+            tickers = list(price_history_by_ticker.keys())[:NUM_COMPANIES]
+            price_history_by_ticker = {
+                ticker: price_history_by_ticker[ticker]['Close', ticker] for ticker in tickers}
+    else:
+        raise ValueError(f'{stage} is not a valid stage. Should be PROD, DEV')
+    
+    daily_returns_by_ticker = calculate_daily_returns(price_history_by_ticker)
+
+    return daily_returns_by_ticker
