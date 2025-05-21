@@ -3,11 +3,11 @@
 import logging
 import pickle
 import sys
-from datetime import date
-
+from datetime import date, timedelta
 
 import pathlib
 import pandas as pd
+import numpy as np
 import requests
 import yfinance as yf
 
@@ -39,44 +39,60 @@ def get_djia_tickers() -> list[str]:
     return [""]
 
 
-def load_data_from_yf(tickers: list[str], simulation_start: date, simulation_end: date) -> dict[str, pd.DataFrame]:
+def load_data_from_yf(ticker: str, simulation_start: date, simulation_end: date) -> pd.DataFrame:
     """Get data from YahooFinance using tickers and simulation period."""
-    price_history_by_ticker = {}
 
     start = simulation_start.isoformat()
     end = simulation_end.isoformat()
 
-    for ticker in tickers:
-        df_ticker = None
-        try:
-            df_ticker = yf.download(
-                ticker, start=start, end=end, progress=False
-            )
-        except TimeoutError as e:
-            logger.exception(
-                "Couldn't fetch data from Yahoo Finance", extra={'error': e})
+    df_ticker = None
 
-        if df_ticker is None or 'Close' not in df_ticker.columns:
-            logger.exception("Couldn't fetch data from Yahoo Finance", extra={
-                             'company': ticker})
-        else:
-            price_history_by_ticker[ticker] = df_ticker['Close']
+    try:
+        df_ticker = yf.download(
+            ticker, start=start, end=end, progress=False
+        )
+    except TimeoutError as e:
+        logger.exception(
+            "Couldn't fetch data from Yahoo Finance", extra={'error': e})
+
+    if df_ticker is None or not isinstance(df_ticker, pd.DataFrame):
+        logger.exception("Invalid data fetched from Yahoo Finance", extra={
+            'company': ticker})
+        return pd.DataFrame()
+
+    if 'Close' not in df_ticker.columns:
+        logger.exception("Missing 'Close' column in fetched data", extra={
+            'company': ticker})
+        return pd.DataFrame()
+
+    return df_ticker[['Close']]
+
+
+def load_history_by_ticker(tickers: list[str], simulation_start: date, simulation_end: date) -> dict[str, pd.DataFrame]:
+    price_history_by_ticker = {}
+
+    for ticker in tickers:
+        price_history_by_ticker[ticker] = load_data_from_yf(
+            ticker, simulation_start, simulation_end)
 
     return price_history_by_ticker
+
 
 def calculate_daily_returns(price_history_by_ticker: dict[str, pd.DataFrame]) -> dict:
     daily_returns_by_ticker = {}
     for ticker in price_history_by_ticker:
-        daily_returns_by_ticker[ticker] = price_history_by_ticker[ticker] / price_history_by_ticker[ticker].shift(1) - 1
+        daily_returns_by_ticker[ticker] = price_history_by_ticker[ticker] / \
+            price_history_by_ticker[ticker].shift(1) - 1
 
     return daily_returns_by_ticker
 
-def run(simulation_start: date, simulation_end: date, stage: str='PROD'):
-    if stage=='PROD':
+
+def run(simulation_start: date, simulation_end: date, risk_free_yf_ticker: str, stage: str = 'PROD') -> tuple[dict[str, pd.DataFrame], float]:
+    if stage == 'PROD':
         tickers = get_djia_tickers()
-        price_history_by_ticker = load_data_from_yf(
-        tickers, simulation_start, simulation_end)
-    elif stage=='DEV':
+        price_history_by_ticker = load_history_by_ticker(
+            tickers, simulation_start, simulation_end)
+    elif stage == 'DEV':
         NUM_COMPANIES = 30
 
         script_dir = pathlib.Path(sys.argv[0]).parent.resolve()
@@ -89,7 +105,14 @@ def run(simulation_start: date, simulation_end: date, stage: str='PROD'):
                 ticker: price_history_by_ticker[ticker]['Close', ticker] for ticker in tickers}
     else:
         raise ValueError(f'{stage} is not a valid stage. Should be PROD, DEV')
-    
+
     daily_returns_by_ticker = calculate_daily_returns(price_history_by_ticker)
 
-    return daily_returns_by_ticker
+    risk_free_df = load_data_from_yf(
+        risk_free_yf_ticker, simulation_start, simulation_start + timedelta(days=1))
+
+    DECIMAL_PLACES = 2
+
+    yearly_risk_free_rate = risk_free_df.iloc[0].iloc[0] / 10**DECIMAL_PLACES
+
+    return daily_returns_by_ticker, yearly_risk_free_rate
