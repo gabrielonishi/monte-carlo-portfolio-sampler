@@ -5,7 +5,6 @@ import time
 from functools import lru_cache
 from datetime import date
 
-
 import data_loader
 import simulate
 
@@ -14,7 +13,8 @@ SIMULATION_START = date(2024, 8, 1)
 SIMULATION_END = date(2024, 12, 31)
 MAX_WEIGHT_PER_ASSET = 0.2
 NUM_SIMULATIONS_PER_PORTFOLIO = 5
-RISK_FREE_YF_TICKER = '^IRX'
+RISK_FREE_YF_TICKER = None
+RISK_FREE_RATE = None
 
 
 script_dir = pathlib.Path(sys.argv[0]).parent.resolve()
@@ -47,11 +47,11 @@ def generate_portfolio_combinations(tickers: tuple[str], portfolio_size: int) ->
 def main():
     start = time.time()
     daily_returns_by_ticker, yearly_risk_free_rate = data_loader.run(
-        SIMULATION_START, SIMULATION_END, RISK_FREE_YF_TICKER, 'DEV')
+        SIMULATION_START, SIMULATION_END, stage='DEV')
 
     portfolios = generate_portfolio_combinations(
         tuple(daily_returns_by_ticker.keys()), ASSETS_PER_PORTFOLIO)
-    
+
     portfolios = portfolios[:20000]
 
     optimal_sharpe, optimal_tickers, optimal_weights = simulate.run(portfolios, daily_returns_by_ticker,

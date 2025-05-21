@@ -34,15 +34,13 @@ def generate_weights(number_of_assets: int, max_weight: float, num_samples: int)
 
 def simulate_optimal_weights(tickers: list[str], weights_list: ndarray, daily_returns_by_ticker: dict[str, pd.DataFrame], yearly_risk_free_rate: float) -> tuple[float, ndarray]:
 
-    daily_returns_matrix = pd.concat(
-        [daily_returns_by_ticker[ticker] for ticker in tickers], axis=1)
-    
-    cov_matrix = daily_returns_matrix.cov()
+    daily_returns_matrix = np.stack([daily_returns_by_ticker[ticker].values for ticker in tickers], axis=0).T
+    cov_matrix = np.cov(daily_returns_matrix, rowvar=False)
 
     optimal_sharpe, optimal_weights = 0, np.zeros(0)
 
     for portfolio_weights in weights_list:
-        weighted_daily_returns = daily_returns_matrix['Close'] @ portfolio_weights
+        weighted_daily_returns = daily_returns_matrix @ portfolio_weights
         average_yearly_returns = np.mean(weighted_daily_returns) * 252
         excess_return = average_yearly_returns - yearly_risk_free_rate
 
@@ -78,6 +76,9 @@ def run(
 
     with multiprocessing.Pool() as pool:
         results = pool.map(simulate_portfolios, args_list)
+    
+    # for args in args_list:
+    #     results = simulate_portfolios(args)
 
     # Find the best result
     optimal_overall_sharpe, optimal_overall_tickers, optimal_overall_weights = 0, [""], np.zeros(0)

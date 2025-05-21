@@ -39,7 +39,7 @@ def get_djia_tickers() -> list[str]:
     return [""]
 
 
-def load_data_from_yf(ticker: str, simulation_start: date, simulation_end: date) -> pd.DataFrame:
+def load_data_from_yf(ticker: str, simulation_start: date, simulation_end: date) -> pd.Series:
     """Get data from YahooFinance using tickers and simulation period."""
 
     start = simulation_start.isoformat()
@@ -58,17 +58,30 @@ def load_data_from_yf(ticker: str, simulation_start: date, simulation_end: date)
     if df_ticker is None or not isinstance(df_ticker, pd.DataFrame):
         logger.exception("Invalid data fetched from Yahoo Finance", extra={
             'company': ticker})
-        return pd.DataFrame()
+        return pd.Series()
 
     if 'Close' not in df_ticker.columns:
         logger.exception("Missing 'Close' column in fetched data", extra={
             'company': ticker})
-        return pd.DataFrame()
+        return pd.Series()
 
-    return df_ticker[['Close']]
+    return df_ticker['Close'][ticker]
 
 
-def load_history_by_ticker(tickers: list[str], simulation_start: date, simulation_end: date) -> dict[str, pd.DataFrame]:
+def calculate_daily_returns(price_history_by_ticker: dict[str, pd.DataFrame]) -> dict:
+    daily_returns_by_ticker = {}
+    for ticker in price_history_by_ticker:
+        daily_returns_df = price_history_by_ticker[ticker] / \
+            price_history_by_ticker[ticker].shift(1) - 1
+
+        daily_returns_by_ticker[ticker] = daily_returns_df[1:]
+
+    return daily_returns_by_ticker
+
+
+def fetch_data_from_yf(simulation_start: date, simulation_end: date):
+    tickers = get_djia_tickers()
+
     price_history_by_ticker = {}
 
     for ticker in tickers:
@@ -77,42 +90,46 @@ def load_history_by_ticker(tickers: list[str], simulation_start: date, simulatio
 
     return price_history_by_ticker
 
+def fetch_data_from_local():
+    script_dir = pathlib.Path(sys.argv[0]).parent.resolve()
+    dev_data_path = script_dir / 'financial_history_data_dev.pkl'
 
-def calculate_daily_returns(price_history_by_ticker: dict[str, pd.DataFrame]) -> dict:
-    daily_returns_by_ticker = {}
-    for ticker in price_history_by_ticker:
-        daily_returns_by_ticker[ticker] = price_history_by_ticker[ticker] / \
-            price_history_by_ticker[ticker].shift(1) - 1
+    with open(file=dev_data_path, mode='rb') as f:
+        price_history_by_ticker = pickle.load(file=f)
 
-    return daily_returns_by_ticker
+    return price_history_by_ticker
 
 
-def run(simulation_start: date, simulation_end: date, risk_free_yf_ticker: str, stage: str = 'PROD') -> tuple[dict[str, pd.DataFrame], float]:
+def calculate_risk_free_rate(simulation_start: date, risk_free_rate: float | None, risk_free_yf_ticker: str | None = '^IRX') -> float:
+    if risk_free_rate is None and risk_free_yf_ticker is None:
+        raise ValueError('User must choose a valid risk free rate')
+
+    if isinstance(risk_free_rate, float):
+        return risk_free_rate
+
+    if isinstance(risk_free_yf_ticker, str):
+        risk_free_df = load_data_from_yf(
+            risk_free_yf_ticker, simulation_start, simulation_start + timedelta(days=1))
+        DECIMAL_PLACES = 2
+        yearly_risk_free_rate = risk_free_df.iloc[0].iloc[0] / \
+            10**DECIMAL_PLACES
+        return yearly_risk_free_rate
+
+    raise ValueError()
+
+
+def run(simulation_start: date, simulation_end: date, risk_free_rate: float | None = 0.051, risk_free_yf_ticker: str | None = '^IRX', stage: str = 'PROD') -> tuple[dict[str, pd.DataFrame], float]:
     if stage == 'PROD':
-        tickers = get_djia_tickers()
-        price_history_by_ticker = load_history_by_ticker(
-            tickers, simulation_start, simulation_end)
+        price_history_by_ticker = fetch_data_from_yf(
+            simulation_start, simulation_end)
     elif stage == 'DEV':
-        NUM_COMPANIES = 30
-
-        script_dir = pathlib.Path(sys.argv[0]).parent.resolve()
-        dev_data_path = script_dir / 'financial_history_data_dev.pkl'
-
-        with open(file=dev_data_path, mode='rb') as f:
-            price_history_by_ticker = pickle.load(file=f)
-            tickers = list(price_history_by_ticker.keys())[:NUM_COMPANIES]
-            price_history_by_ticker = {
-                ticker: price_history_by_ticker[ticker]['Close', ticker] for ticker in tickers}
+        price_history_by_ticker = fetch_data_from_local()
     else:
         raise ValueError(f'{stage} is not a valid stage. Should be PROD, DEV')
 
+    yearly_risk_free_rate = calculate_risk_free_rate(
+        simulation_start, risk_free_rate, risk_free_yf_ticker)
+
     daily_returns_by_ticker = calculate_daily_returns(price_history_by_ticker)
-
-    risk_free_df = load_data_from_yf(
-        risk_free_yf_ticker, simulation_start, simulation_start + timedelta(days=1))
-
-    DECIMAL_PLACES = 2
-
-    yearly_risk_free_rate = risk_free_df.iloc[0].iloc[0] / 10**DECIMAL_PLACES
 
     return daily_returns_by_ticker, yearly_risk_free_rate
