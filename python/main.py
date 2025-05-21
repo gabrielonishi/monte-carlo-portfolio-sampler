@@ -1,11 +1,10 @@
 import logging
 import pathlib
-import pickle
 import sys
+import time
 from functools import lru_cache
 from datetime import date
 
-import pandas as pd
 
 import data_loader
 import simulate
@@ -46,6 +45,7 @@ def generate_portfolio_combinations(tickers: tuple[str], portfolio_size: int) ->
 
 
 def main():
+    start = time.time()
     daily_returns_by_ticker, yearly_risk_free_rate = data_loader.run(
         SIMULATION_START, SIMULATION_END, RISK_FREE_YF_TICKER, 'DEV')
 
@@ -61,6 +61,7 @@ def main():
     for t, w in zip(optimal_tickers, optimal_weights):
         print(t, "{:.2f}".format(w))
 
+    print('Time: ', "{:.2f}".format(time.time() - start), 's')
 
 if __name__ == '__main__':
     main()

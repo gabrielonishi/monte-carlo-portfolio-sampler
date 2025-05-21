@@ -36,6 +36,8 @@ def simulate_optimal_weights(tickers: list[str], weights_list: ndarray, daily_re
 
     daily_returns_matrix = pd.concat(
         [daily_returns_by_ticker[ticker] for ticker in tickers], axis=1)
+    
+    cov_matrix = daily_returns_matrix.cov()
 
     optimal_sharpe, optimal_weights = 0, np.zeros(0)
 
@@ -44,7 +46,6 @@ def simulate_optimal_weights(tickers: list[str], weights_list: ndarray, daily_re
         average_yearly_returns = np.mean(weighted_daily_returns) * 252
         excess_return = average_yearly_returns - yearly_risk_free_rate
 
-        cov_matrix = daily_returns_matrix.cov()
         portfolio_vol_daily = np.sqrt(
             portfolio_weights.T @ cov_matrix @ portfolio_weights)
         portfolio_vol_yearly = portfolio_vol_daily * np.sqrt(252)
