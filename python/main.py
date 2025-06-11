@@ -2,8 +2,8 @@ import logging
 import pathlib
 import sys
 import time
-from functools import lru_cache
 from datetime import date
+from functools import lru_cache
 
 import data_loader
 import simulate
@@ -12,7 +12,7 @@ ASSETS_PER_PORTFOLIO = 25
 SIMULATION_START = date(2024, 8, 1)
 SIMULATION_END = date(2024, 12, 31)
 MAX_WEIGHT_PER_ASSET = 0.2
-NUM_SIMULATIONS_PER_PORTFOLIO = 5
+NUM_SIMULATIONS_PER_PORTFOLIO = 1000
 RISK_FREE_YF_TICKER = None
 RISK_FREE_RATE = None
 
@@ -52,16 +52,15 @@ def main():
     portfolios = generate_portfolio_combinations(
         tuple(daily_returns_by_ticker.keys()), ASSETS_PER_PORTFOLIO)
 
-    portfolios = portfolios[:20000]
+    optimal_sharpe, optimal_tickers, optimal_weights = simulate.run(
+        portfolios, daily_returns_by_ticker, MAX_WEIGHT_PER_ASSET, NUM_SIMULATIONS_PER_PORTFOLIO)
 
-    optimal_sharpe, optimal_tickers, optimal_weights = simulate.run(portfolios, daily_returns_by_ticker,
-                                                                    yearly_risk_free_rate, MAX_WEIGHT_PER_ASSET, NUM_SIMULATIONS_PER_PORTFOLIO)
-    
     print('Optimal Sharpe:', optimal_sharpe)
     for t, w in zip(optimal_tickers, optimal_weights):
         print(t, "{:.2f}".format(w))
 
     print('Time: ', "{:.2f}".format(time.time() - start), 's')
+
 
 if __name__ == '__main__':
     main()
